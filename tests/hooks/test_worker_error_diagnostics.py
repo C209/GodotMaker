@@ -20,6 +20,7 @@ from metrics.diagnostics import (  # noqa: E402
     MAX_OUTPUT_TAIL_CHARS,
     MAX_SUMMARY_CHARS,
     build_worker_error_event,
+    read_runtime,
     record_worker_error,
 )
 
@@ -257,6 +258,13 @@ def test_runtime_comes_from_top_level_agent_config(tmp_path):
         stage="build",
     )
     assert event["runtime"] == "codex"
+
+
+def test_runtime_normalizes_workbuddy_alias_from_top_level_config(tmp_path):
+    config = tmp_path / ".godotmaker" / "config.yaml"
+    config.write_text("agent: codebuddy\n", encoding="utf-8")
+
+    assert read_runtime(str(tmp_path)) == "workbuddy"
 
 
 def test_log_subagent_does_not_diagnose_other_roles():

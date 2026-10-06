@@ -220,6 +220,10 @@ def read_runtime(project_dir: str = ".") -> str:
         "openai-codex": "codex",
         "opencode": "opencode",
         "pi": "pi",
+        "workbuddy": "workbuddy",
+        "work-buddy": "workbuddy",
+        "codebuddy": "workbuddy",
+        "code-buddy": "workbuddy",
     }
     config = os.path.join(project_dir, ".godotmaker", "config.yaml")
     try:
@@ -233,9 +237,21 @@ def read_runtime(project_dir: str = ".") -> str:
                     return aliases.get(normalized.lower(), normalized.lower()) or "unknown"
     except OSError:
         pass
-    for directory, runtime in ((".agents", "codex"), (".opencode", "opencode"), (".pi", "pi")):
+    for directory, runtime in (
+        (".agents", "codex"),
+        (".opencode", "opencode"),
+        (".pi", "pi"),
+    ):
         if os.path.isdir(os.path.join(project_dir, directory)):
             return runtime
+    # A bare `.workbuddy/` can hold host metadata or project memory without
+    # selecting the WorkBuddy GodotMaker adapter. Require a publish marker.
+    workbuddy_root = os.path.join(project_dir, ".workbuddy")
+    if (
+        os.path.isfile(os.path.join(workbuddy_root, "godotmaker.yaml"))
+        or os.path.isdir(os.path.join(workbuddy_root, "skills"))
+    ):
+        return "workbuddy"
     return "claude-code"
 
 

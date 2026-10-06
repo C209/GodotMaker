@@ -14,6 +14,7 @@ from publish import (
     AGENT_CLAUDE_CODE,
     AGENT_CODEX,
     AGENT_OPENCODE,
+    AGENT_WORKBUDDY,
     render_agent_instructions,
     publish_skills,
     publish_shared_refs,
@@ -97,6 +98,7 @@ def _root_instruction_indexes(
             AGENT_CLAUDE_CODE: ".claude",
             AGENT_CODEX: ".agents",
             AGENT_OPENCODE: ".opencode",
+            AGENT_WORKBUDDY: ".workbuddy",
         }[agent]
         return (
             f"{runtime_root}/skills/{skill_name}/references/{filename}"
@@ -107,6 +109,7 @@ def _root_instruction_indexes(
         f".claude/skills/{skill_name}/references/{filename}",
         f".agents/skills/{skill_name}/references/{filename}",
         f".opencode/skills/{skill_name}/references/{filename}",
+        f".workbuddy/skills/{skill_name}/references/{filename}",
     ]
     for template_path in ROOT_INSTRUCTION_TEMPLATES:
         if not template_path.exists():

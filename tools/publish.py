@@ -3,7 +3,8 @@
 
 Flattens skills/core/* and skills/reviewer/* into the selected agent-native
 skill location: .claude/skills/ for Claude Code, .agents/skills/ for Codex,
-or .opencode/skills/ for OpenCode.
+.opencode/skills/ for OpenCode, .pi/skills/ for Pi, or .workbuddy/skills/
+for WorkBuddy.
 Also copies tools, config, hooks, templates, and sets up agent-specific files.
 
 Supports versioned upgrades: compares source VERSION against the
@@ -13,6 +14,8 @@ Usage:
     python tools/publish.py <target_godot_project_dir>
     python tools/publish.py --agent codex <target_godot_project_dir>
     python tools/publish.py --agent opencode <target_godot_project_dir>
+    python tools/publish.py --agent pi <target_godot_project_dir>
+    python tools/publish.py --agent workbuddy <target_godot_project_dir>
     python tools/publish.py --force <target_godot_project_dir>
 """
 import argparse
@@ -27,7 +30,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
 
-from agent_runtime import AGENT_CLAUDE_CODE, AGENT_CODEX, AGENT_OPENCODE, AGENT_PI
+from agent_runtime import (
+    AGENT_CLAUDE_CODE,
+    AGENT_CODEX,
+    AGENT_OPENCODE,
+    AGENT_PI,
+    AGENT_WORKBUDDY,
+)
 from asset_family_registry import check_registry
 from project_config import (
     ProjectConfigResult,
@@ -50,12 +59,19 @@ class VersionCheckResult(NamedTuple):
     source_ver: SemVer | None
 
 EXCLUDE_DIRS = {"__pycache__", "doc_source", ".workspace"}
-AGENT_CHOICES = (AGENT_CLAUDE_CODE, AGENT_CODEX, AGENT_OPENCODE, AGENT_PI)
+AGENT_CHOICES = (
+    AGENT_CLAUDE_CODE,
+    AGENT_CODEX,
+    AGENT_OPENCODE,
+    AGENT_PI,
+    AGENT_WORKBUDDY,
+)
 AGENT_RUNTIME_SOURCE_ROOTS = {
     AGENT_CLAUDE_CODE: Path("agent-runtimes") / "claude-code",
     AGENT_CODEX: Path("agent-runtimes") / "codex",
     AGENT_OPENCODE: Path("agent-runtimes") / "opencode",
     AGENT_PI: Path("agent-runtimes") / "pi",
+    AGENT_WORKBUDDY: Path("agent-runtimes") / "workbuddy",
 }
 AGENT_RUNTIME_REFERENCES = {
     AGENT_CODEX: (
@@ -68,11 +84,15 @@ AGENT_RUNTIME_REFERENCES = {
     AGENT_PI: (
         Path("references") / "runtime-mapping.md",
     ),
+    AGENT_WORKBUDDY: (
+        Path("references") / "runtime-mapping.md",
+    ),
 }
 AGENT_ROOT_BOOTSTRAP_TEMPLATES = {
     AGENT_CODEX: Path("templates") / "agents-bootstrap.md",
     AGENT_OPENCODE: Path("templates") / "agents-bootstrap.md",
     AGENT_PI: Path("templates") / "agents-bootstrap.md",
+    AGENT_WORKBUDDY: Path("templates") / "agents-bootstrap.md",
 }
 AGENT_HOOK_CONFIGS = {
     AGENT_CLAUDE_CODE: (
@@ -82,6 +102,10 @@ AGENT_HOOK_CONFIGS = {
     AGENT_CODEX: (
         Path("config") / "hooks.json",
         Path(".codex") / "hooks.json",
+    ),
+    AGENT_WORKBUDDY: (
+        Path("config") / "settings.json",
+        Path(".workbuddy") / "settings.json",
     ),
 }
 AGENT_RUNTIME_EXTENSION_DIRS = {
@@ -191,6 +215,20 @@ AGENT_ADAPTERS = {
         templates_root=".pi/templates",
         plugins_root=".pi/extensions",
         runtime_references_root=".pi/references",
+        root_instruction_filename="AGENTS.md",
+        register_claude_mcp=False,
+        register_godot_permissions=False,
+        ensure_worktreeinclude=False,
+    ),
+    AGENT_WORKBUDDY: AgentPublishAdapter(
+        agent_id=AGENT_WORKBUDDY,
+        project_config_root=".workbuddy",
+        skill_root=".workbuddy/skills",
+        agents_root=".workbuddy/agents",
+        config_root=".workbuddy/config",
+        templates_root=".workbuddy/templates",
+        plugins_root=None,
+        runtime_references_root=".workbuddy/references",
         root_instruction_filename="AGENTS.md",
         register_claude_mcp=False,
         register_godot_permissions=False,
@@ -378,12 +416,29 @@ def copy_tree(src: Path, dst: Path):
 # ── Publish steps ──────────────────────────────────────────────
 
 
+def _replace_claude_runtime_paths(text: str, runtime_root: str) -> str:
+    """Rewrite Claude-shaped project paths for a native runtime layout."""
+    replacements = {
+        ".claude/skills": f"{runtime_root}/skills",
+        ".claude/agents": f"{runtime_root}/agents",
+        ".claude/templates": f"{runtime_root}/templates",
+        ".claude/config": f"{runtime_root}/config",
+        ".claude/godotmaker.yaml": f"{runtime_root}/godotmaker.yaml",
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    return text
+
+
 def render_root_instruction_text(text: str, adapter: AgentPublishAdapter) -> str:
     """Render the selected agent's root instruction file."""
     if adapter.agent_id == AGENT_CLAUDE_CODE:
         return text
 
-    return text.replace("CLAUDE.md", adapter.root_instruction_filename)
+    rendered = text.replace("CLAUDE.md", adapter.root_instruction_filename)
+    if adapter.agent_id == AGENT_WORKBUDDY:
+        rendered = _replace_claude_runtime_paths(rendered, ".workbuddy")
+    return rendered
 
 
 def render_agent_template_tree(root: Path, adapter: AgentPublishAdapter) -> None:
@@ -401,6 +456,8 @@ def render_agent_template_tree(root: Path, adapter: AgentPublishAdapter) -> None
             continue
         text = file.read_text(encoding="utf-8")
         rewritten = text.replace("CLAUDE.md", adapter.root_instruction_filename)
+        if adapter.agent_id == AGENT_WORKBUDDY:
+            rewritten = _replace_claude_runtime_paths(rewritten, ".workbuddy")
         if rewritten != text:
             file.write_text(rewritten, encoding="utf-8")
         file.replace(file.with_name("agents.md.tmpl"))
@@ -732,6 +789,11 @@ def render_pi_agent_role_text(text: str, role_name: str) -> str:
     return rendered
 
 
+def render_workbuddy_agent_role_text(text: str) -> str:
+    """Render a shared role definition for WorkBuddy project agents."""
+    return _replace_claude_runtime_paths(text, ".workbuddy")
+
+
 def publish_agents(repo_root: Path, agents_target: Path,
                    agent: str = AGENT_CLAUDE_CODE) -> int:
     """Publish GodotMaker role definitions for the selected runtime."""
@@ -750,6 +812,8 @@ def publish_agents(repo_root: Path, agents_target: Path,
             rendered = render_opencode_agent_role_text(source, file.stem)
         elif agent == AGENT_PI:
             rendered = render_pi_agent_role_text(source, file.stem)
+        elif agent == AGENT_WORKBUDDY:
+            rendered = render_workbuddy_agent_role_text(source)
         else:
             rendered = source
         (agents_target / file.name).write_text(rendered, encoding="utf-8")
@@ -1252,8 +1316,8 @@ def ensure_gitignore(target: Path, agent: str = AGENT_CLAUDE_CODE):
     """Ensure .gitignore covers local-only agent config and runtime state.
 
     .claude/ is fully ignored (Claude Code config, not project code). Codex
-    `.agents/` is intentionally not ignored because Codex-managed git
-    worktrees need the published skills and runtime mapping from git.
+    `.agents/` and WorkBuddy `.workbuddy/` are intentionally not ignored so
+    published skills, agents, hooks, and runtime mapping can be versioned.
     .godotmaker/ is selectively ignored: hooks and config are tracked,
     runtime state (metrics, session state) is ignored. This allows
     git worktrees to inherit hooks automatically.
@@ -1285,6 +1349,8 @@ def ensure_gitignore(target: Path, agent: str = AGENT_CLAUDE_CODE):
     old_blankets = [".godotmaker/"]
     if adapter.agent_id == AGENT_CODEX:
         old_blankets.append(".agents/")
+    elif adapter.agent_id == AGENT_WORKBUDDY:
+        old_blankets.append(".workbuddy/")
 
     if gitignore.exists():
         content = gitignore.read_text(encoding="utf-8", errors="replace")
@@ -1539,6 +1605,11 @@ def main():
             sys.exit(1)
         if not register_opencode_mcp(target, godot_path):
             sys.exit(1)
+    elif adapter.agent_id == AGENT_WORKBUDDY:
+        print(
+            "WorkBuddy MCP setup is user-managed. Ensure the godot MCP "
+            "connector is configured and trusted before running GodotMaker stages."
+        )
     if adapter.register_godot_permissions:
         register_godot_permissions(config_dir / "settings.json", godot_path)
 

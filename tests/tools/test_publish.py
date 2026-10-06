@@ -277,6 +277,41 @@ def _publish_pi_project(tmp_path, monkeypatch, before_publish=None):
     return target
 
 
+def _publish_workbuddy_project(tmp_path, monkeypatch, before_publish=None):
+    from _version import SemVer
+
+    target = tmp_path / "target"
+    config_dir = target / ".workbuddy"
+    config_dir.mkdir(parents=True)
+    (config_dir / "godotmaker.yaml").write_text(
+        'godot_path: "/test/godot"\n', encoding="utf-8"
+    )
+    if before_publish is not None:
+        before_publish(target)
+
+    monkeypatch.setattr(
+        publish, "check_version_upgrade",
+        lambda *_args, **_kwargs: (True, "FRESH", None, SemVer(0, 3, 5)),
+    )
+
+    def _unexpected_mcp(*_args, **_kwargs):
+        raise AssertionError("WorkBuddy publish must not invoke an agent CLI MCP command")
+
+    for name in ("register_codex_mcp", "register_opencode_mcp", "register_mcp"):
+        monkeypatch.setattr(publish, name, _unexpected_mcp)
+    for name in (
+        "register_godot_permissions", "ensure_git_repo", "baseline_applied",
+    ):
+        monkeypatch.setattr(publish, name, lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(publish, "run_migrations", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(sys, "argv", [
+        "publish.py", "--agent", "workbuddy", "--force",
+        "--no-config-review", str(target),
+    ])
+    publish.main()
+    return target
+
+
 class TestReadGodotPath:
     def test_missing_file(self, tmp_path):
         assert read_godot_path(tmp_path / "nope.yaml") == "godot"
@@ -673,6 +708,33 @@ class TestCreateProjectConfig:
         )
         assert agent_runtime.read_godot_path(tmp_path) == "/opt/opencode-godot"
 
+    def test_published_workbuddy_agent_selects_workbuddy_runtime_config(self, tmp_path):
+        create_project_config(tmp_path, publish.AGENT_WORKBUDDY)
+        (tmp_path / ".workbuddy").mkdir()
+        (tmp_path / ".workbuddy" / "godotmaker.yaml").write_text(
+            "godot_path: /opt/workbuddy-godot\n", encoding="utf-8"
+        )
+
+        assert agent_runtime.normalize_agent("codebuddy") == publish.AGENT_WORKBUDDY
+        assert agent_runtime.detect_agent(tmp_path) == publish.AGENT_WORKBUDDY
+        assert agent_runtime.godotmaker_yaml(tmp_path) == (
+            tmp_path / ".workbuddy" / "godotmaker.yaml"
+        )
+        assert agent_runtime.agent_skill_root(tmp_path) == (
+            tmp_path / ".workbuddy" / "skills"
+        )
+        assert agent_runtime.agent_runtime_mapping(tmp_path) == (
+            tmp_path / ".workbuddy" / "references" / "runtime-mapping.md"
+        )
+        assert agent_runtime.read_godot_path(tmp_path) == "/opt/workbuddy-godot"
+
+    def test_workbuddy_fallback_requires_published_runtime_markers(self, tmp_path):
+        (tmp_path / ".workbuddy" / "memory").mkdir(parents=True)
+        assert agent_runtime.detect_agent(tmp_path) == publish.AGENT_CLAUDE_CODE
+
+        (tmp_path / ".workbuddy" / "skills").mkdir()
+        assert agent_runtime.detect_agent(tmp_path) == publish.AGENT_WORKBUDDY
+
     def test_agent_runtime_cli_reads_config_from_project_subdir(
         self, tmp_path, capsys
     ):
@@ -799,6 +861,28 @@ class TestEnsureGitignore:
         assert ".claude/" not in content
         for entry in SELECTIVE_ENTRIES[1:]:
             assert entry in content
+
+    def test_workbuddy_keeps_project_runtime_tracked(self, tmp_path):
+        ensure_gitignore(tmp_path, publish.AGENT_WORKBUDDY)
+        lines = {
+            line.strip()
+            for line in (tmp_path / ".gitignore").read_text().splitlines()
+        }
+        assert ".workbuddy/" not in lines
+        assert ".claude/" not in lines
+        for entry in SELECTIVE_ENTRIES[1:]:
+            assert entry in lines
+
+    def test_workbuddy_removes_old_blanket_ignore(self, tmp_path):
+        gi = tmp_path / ".gitignore"
+        gi.write_text(".workbuddy/\n*.tmp\n")
+        ensure_gitignore(tmp_path, publish.AGENT_WORKBUDDY)
+        lines = {
+            line.strip()
+            for line in gi.read_text().splitlines()
+        }
+        assert ".workbuddy/" not in lines
+        assert "*.tmp" in lines
 
     def test_codex_removes_old_agents_blanket_ignore(self, tmp_path):
         gi = tmp_path / ".gitignore"
@@ -1027,6 +1111,7 @@ class TestPublishedAssetRuntime:
             (_publish_claude_project, ".claude/skills"),
             (_publish_codex_project, ".agents/skills"),
             (_publish_opencode_project, ".opencode/skills"),
+            (_publish_workbuddy_project, ".workbuddy/skills"),
         ],
     )
     def test_each_adapter_deploys_non_invokable_asset_runtime(
@@ -1049,6 +1134,7 @@ class TestPublishedAssetRuntime:
             (_publish_claude_project, ".claude/skills"),
             (_publish_codex_project, ".agents/skills"),
             (_publish_opencode_project, ".opencode/skills"),
+            (_publish_workbuddy_project, ".workbuddy/skills"),
         ],
     )
     def test_published_asset_skills_reference_existing_runtime_paths(
@@ -1088,6 +1174,7 @@ class TestPublishedAssetRuntime:
             publish.AGENT_CODEX: _publish_codex_project,
             publish.AGENT_OPENCODE: _publish_opencode_project,
             publish.AGENT_PI: _publish_pi_project,
+            publish.AGENT_WORKBUDDY: _publish_workbuddy_project,
         }[agent]
         skill_root = publish.get_agent_adapter(agent).skill_root
         result = publish_project(tmp_path, monkeypatch)
@@ -1419,6 +1506,30 @@ class TestPublishAgents:
         assert ".opencode/skills/*/checklist.md" in content
         assert ".claude/skills" not in content
 
+    def test_workbuddy_agent_render_uses_workbuddy_paths(self, tmp_path):
+        repo = tmp_path / "repo"
+        agents = repo / "agents"
+        agents.mkdir(parents=True)
+        (agents / "worker.md").write_text(
+            "---\n"
+            "name: worker\n"
+            "description: Implements tasks\n"
+            "model: inherit\n"
+            "---\n\n"
+            "Read `.claude/skills/gecs/SKILL.md` and "
+            "`.claude/godotmaker.yaml`.\n",
+            encoding="utf-8",
+        )
+
+        target = tmp_path / "target" / ".workbuddy" / "agents"
+        assert publish_agents(repo, target, publish.AGENT_WORKBUDDY) == 1
+
+        content = (target / "worker.md").read_text(encoding="utf-8")
+        assert "model: inherit" in content
+        assert ".workbuddy/skills/gecs/SKILL.md" in content
+        assert ".workbuddy/godotmaker.yaml" in content
+        assert ".claude/" not in content
+
     def test_non_opencode_agent_render_preserves_source(self, tmp_path):
         repo = tmp_path / "repo"
         agents = repo / "agents"
@@ -1470,6 +1581,13 @@ class TestDeployAgentInstructions:
             "the runtime mapping at `.opencode/references/runtime-mapping.md`.\n\n",
             encoding="utf-8",
         )
+        workbuddy_templates = repo / "agent-runtimes" / "workbuddy" / "templates"
+        workbuddy_templates.mkdir(parents=True)
+        (workbuddy_templates / "agents-bootstrap.md").write_text(
+            "Before executing any GodotMaker stage in WorkBuddy, apply "
+            "`.workbuddy/references/runtime-mapping.md`.\n\n",
+            encoding="utf-8",
+        )
         return repo
 
     def test_claude_deploys_claude_md(self, tmp_path):
@@ -1512,6 +1630,19 @@ class TestDeployAgentInstructions:
         assert content.startswith("# AGENTS.md")
         assert "OpenCode" in content
         assert ".opencode/references/runtime-mapping.md" in content
+        assert not (target / "CLAUDE.md").exists()
+
+    def test_workbuddy_derives_agents_md_with_native_paths(self, tmp_path):
+        repo = self._make_repo(tmp_path)
+        target = tmp_path / "target"
+        target.mkdir()
+        deploy_agent_instructions(repo, target, publish.AGENT_WORKBUDDY)
+        content = (target / "AGENTS.md").read_text(encoding="utf-8")
+        assert content.startswith("# AGENTS.md")
+        assert "WorkBuddy" in content
+        assert ".workbuddy/references/runtime-mapping.md" in content
+        assert ".workbuddy/skills/gm-*/SKILL.md" in content
+        assert ".claude/" not in content
         assert not (target / "CLAUDE.md").exists()
 
     def test_claude_instructions_do_not_include_codex_bootstrap(self):
@@ -1786,6 +1917,74 @@ class TestCodexPublishParity:
         source = json.loads(source_file.read_text(encoding="utf-8"))
         assert deployed == source
         assert "PreToolUse" not in deployed["hooks"]
+
+
+class TestWorkBuddyPublishParity:
+    def test_workbuddy_publish_outputs_required_runtime_contract(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        target = _publish_workbuddy_project(tmp_path, monkeypatch)
+
+        for skill_name in PRIMARY_ROLE_SKILLS:
+            assert (
+                target / ".workbuddy" / "skills" / skill_name / "SKILL.md"
+            ).exists(), f"missing WorkBuddy skill: {skill_name}"
+
+        assert (target / ".workbuddy" / "agents" / "worker.md").exists()
+        assert (
+            target / ".workbuddy" / "references" / "runtime-mapping.md"
+        ).exists()
+        assert (target / ".workbuddy" / "templates" / "ROADMAP.md").exists()
+        assert (
+            target / ".workbuddy" / "config" / "config.yaml.default"
+        ).exists()
+        assert (target / ".workbuddy" / "godotmaker.yaml").exists()
+        assert (target / ".workbuddy" / "settings.json").exists()
+        assert (target / "AGENTS.md").exists()
+        assert not (target / "CLAUDE.md").exists()
+        assert not (target / ".claude" / "skills").exists()
+        assert "MCP setup is user-managed" in capsys.readouterr().out
+
+    def test_workbuddy_runtime_mapping_and_agents_use_workbuddy_paths(
+        self, tmp_path, monkeypatch
+    ):
+        target = _publish_workbuddy_project(tmp_path, monkeypatch)
+        mapping = (
+            target / ".workbuddy" / "references" / "runtime-mapping.md"
+        ).read_text(encoding="utf-8")
+        worker = (
+            target / ".workbuddy" / "agents" / "worker.md"
+        ).read_text(encoding="utf-8")
+
+        assert "WorkBuddy Runtime Mapping" in mapping
+        assert ".workbuddy/skills" in mapping
+        assert "WorkBuddy's Agent tool" in mapping
+        assert "user-level WorkBuddy MCP registry" in mapping
+        assert ".workbuddy/skills" in worker
+        assert ".claude/skills" not in worker
+
+    def test_workbuddy_publish_outputs_runtime_hook_config(
+        self, tmp_path, monkeypatch
+    ):
+        target = _publish_workbuddy_project(tmp_path, monkeypatch)
+        settings_file = target / ".workbuddy" / "settings.json"
+        source_file = (
+            Path(__file__).parents[2] / "agent-runtimes" / "workbuddy" /
+            "config" / "settings.json"
+        )
+
+        assert json.loads(settings_file.read_text(encoding="utf-8")) == json.loads(
+            source_file.read_text(encoding="utf-8")
+        )
+        write_hooks = [
+            hook["command"]
+            for entry in json.loads(
+                settings_file.read_text(encoding="utf-8")
+            )["hooks"]["PreToolUse"]
+            if entry["matcher"] == "Write|Edit"
+            for hook in entry["hooks"]
+        ]
+        assert any("check_file_permissions.py" in hook for hook in write_hooks)
 
 
 class TestOpenCodePublishParity:

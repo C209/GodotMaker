@@ -20,6 +20,7 @@ from agent_runtime import (
     AGENT_CODEX,
     AGENT_OPENCODE,
     AGENT_PI,
+    AGENT_WORKBUDDY,
     detect_agent,
     read_godot_path,
 )
@@ -523,6 +524,40 @@ def check_pi(r: EnvCheck, project_dir: Path):
     r.warn("Pi project resources require trust; start Pi with --approve or approve the project interactively")
 
 
+def check_workbuddy(r: EnvCheck, project_dir: Path):
+    """Check the project-local WorkBuddy runtime layout."""
+    print("\n--- WorkBuddy ---")
+    paths = [
+        (project_dir / ".workbuddy" / "skills", ".workbuddy/skills"),
+        (project_dir / ".workbuddy" / "agents", ".workbuddy/agents"),
+        (
+            project_dir / ".workbuddy" / "references" / "runtime-mapping.md",
+            ".workbuddy/references/runtime-mapping.md",
+        ),
+        (
+            project_dir / ".workbuddy" / "godotmaker.yaml",
+            ".workbuddy/godotmaker.yaml",
+        ),
+        (
+            project_dir / ".workbuddy" / "settings.json",
+            ".workbuddy/settings.json",
+        ),
+    ]
+    for path, label in paths:
+        if path.exists():
+            r.ok(f"{label} present")
+        else:
+            r.fail(f"{label} missing; re-run publish with --agent workbuddy")
+
+    # Connector registration and trust are stored in WorkBuddy's user-level
+    # configuration, which a project-local environment check must not mutate or
+    # infer from the published files alone.
+    r.warn(
+        "WorkBuddy godot MCP connector and project resource trust must be "
+        "verified in the WorkBuddy UI"
+    )
+
+
 def check_selected_agent(r: EnvCheck, project_dir: Path):
     agent = detect_agent(project_dir)
     print(f"\n--- Selected Agent ({agent}) ---")
@@ -534,6 +569,8 @@ def check_selected_agent(r: EnvCheck, project_dir: Path):
         check_opencode(r, project_dir)
     elif agent == AGENT_PI:
         check_pi(r, project_dir)
+    elif agent == AGENT_WORKBUDDY:
+        check_workbuddy(r, project_dir)
     else:
         r.fail(f"Unsupported GodotMaker agent: {agent}")
 
@@ -559,10 +596,16 @@ def check_runtime_model_provider(
                     "set vqa_model to codex, gemini:<model>, or openai:<model>"
                 )
             return
-        if capability == "image_inspection" and agent in {AGENT_CODEX, AGENT_CLAUDE_CODE}:
+        if capability == "image_inspection" and agent in {
+            AGENT_CODEX,
+            AGENT_CLAUDE_CODE,
+            AGENT_WORKBUDDY,
+        }:
             r.ok("native image inspection uses the active agent runtime")
         elif capability == "image_generation" and agent == AGENT_CODEX:
             r.ok("native image generation uses the active Codex runtime")
+        elif capability == "image_generation" and agent == AGENT_WORKBUDDY:
+            r.ok("native image generation uses the active WorkBuddy runtime")
         elif capability == "image_generation" and agent == AGENT_CLAUDE_CODE:
             r.warn(
                 "native image generation for Claude Code must be provided by "

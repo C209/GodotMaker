@@ -202,6 +202,16 @@ class TestCheckFunctions:
         check_selected_agent(r, tmp_path)
         mock_opencode.assert_called_once_with(r, tmp_path)
 
+    @patch("check_env.check_workbuddy")
+    @patch("check_env.detect_agent", return_value="workbuddy")
+    def test_check_selected_agent_uses_workbuddy(
+        self, mock_detect, mock_workbuddy, tmp_path
+    ):
+        from check_env import check_selected_agent
+        r = EnvCheck()
+        check_selected_agent(r, tmp_path)
+        mock_workbuddy.assert_called_once_with(r, tmp_path)
+
     @patch("check_env.check_claude")
     @patch("check_env.detect_agent", return_value="claude-code")
     def test_check_selected_agent_uses_claude(self, mock_detect, mock_claude, tmp_path):
@@ -259,6 +269,32 @@ class TestCheckFunctions:
         assert any(".opencode/plugins/godotmaker-hooks.js present" in p for p in r.passed)
         assert any("OpenCode MCP server 'godot' configured" in p for p in r.passed)
         assert len(r.failed) == 0
+
+    def test_check_workbuddy_validates_project_runtime_layout(self, tmp_path: Path):
+        from check_env import check_workbuddy
+
+        for relative in (
+            ".workbuddy/skills",
+            ".workbuddy/agents",
+            ".workbuddy/references",
+        ):
+            (tmp_path / relative).mkdir(parents=True, exist_ok=True)
+        (
+            tmp_path / ".workbuddy" / "references" / "runtime-mapping.md"
+        ).write_text("mapping\n")
+        (tmp_path / ".workbuddy" / "godotmaker.yaml").write_text(
+            "godot_path: /opt/godot\n"
+        )
+        (tmp_path / ".workbuddy" / "settings.json").write_text(
+            '{"hooks": {}}\n'
+        )
+
+        r = EnvCheck()
+        check_workbuddy(r, tmp_path)
+
+        assert not r.failed
+        assert any(".workbuddy/skills present" in p for p in r.passed)
+        assert any("WorkBuddy UI" in warning for warning in r.warnings)
 
     @patch.dict(os.environ, {"GOOGLE_API_KEY": "AIzaSyTestKey12345678"}, clear=False)
     def test_check_api_keys_present_for_configured_gemini(self):
@@ -485,6 +521,24 @@ class TestCheckFunctions:
 
         assert not r.failed
         assert any("native image generation for Claude Code" in w for w in r.warnings)
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_workbuddy_native_image_and_vqa_use_active_runtime(self):
+        from check_env import check_api_keys
+
+        r = EnvCheck()
+        check_api_keys(
+            r,
+            {
+                "asset_image_model": "native",
+                "vqa_model": "native",
+            },
+            agent="workbuddy",
+        )
+
+        assert not r.failed
+        assert any("native image generation" in p for p in r.passed)
+        assert any("native image inspection" in p for p in r.passed)
 
     @patch.dict(os.environ, {}, clear=True)
     def test_opencode_native_image_generation_fails_until_supported(self):
