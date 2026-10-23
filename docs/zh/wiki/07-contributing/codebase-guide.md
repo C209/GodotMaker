@@ -18,7 +18,7 @@ GodotMaker/
 ├── tools/                   publish.py, check_env.py, check_project.py, asset_*.py, migrate.py
 ├── config/                  config.yaml.default, stage_schemas.json, addon_versions.json
 ├── agent-runtimes/          runner 专属 reference、template、hook config 和 plugin adapter
-├── templates/               文档模板（GDD, PLAN, STRUCTURE, SCENES, ASSETS, GAP, MEMORY, TOC）
+├── templates/               文档模板（GDD, PLAN, STRUCTURE, SCENES, ASSETS, GAP, TOC）
 ├── tests/                   ~320 个 hook 和工具的单元测试
 ├── docs/                    versioning.md, hooks.md, wiki/, update/, contributing/, reference/
 ├── shell/                   publish.sh / publish.ps1, report.sh / report.bat
@@ -188,7 +188,7 @@ manifest 的 schema、添加/移除流程和调试技巧见 `docs/contributing/s
 
 ## templates/
 
-Markdown 文档模板，由 `publish.py` 部署到新游戏项目的所选 agent 模板目录下。角色技能在工作过程中填充这些模板。模板包括：`GDD.md`、`PLAN.md`、`STRUCTURE.md`、`SCENES.md`、`ASSETS.md`、`GAP.md`、`MEMORY.md`、`TOC.md`、`game-claude.md`。
+Markdown 文档模板，由 `publish.py` 部署到新游戏项目的所选 agent 模板目录下。角色技能在工作过程中填充这些模板。模板包括：`GDD.md`、`PLAN.md`、`STRUCTURE.md`、`SCENES.md`、`ASSETS.md`、`GAP.md`、`TOC.md`、`game-claude.md`。
 
 ---
 
