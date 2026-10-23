@@ -12,6 +12,8 @@ contract defines when an entry is required, its format, and allowed categories.
 
 ## Added
 
+- Added a canonical agent-operation contract with executable Claude Code, Codex, OpenCode, and Pi mappings, including runtime-neutral supporting-skill and visual QA handoffs (#226) — @RandallLiuXin.
+
 ## Changed
 
 - Publishing existing projects now refreshes GodotMaker-managed runtime hooks for Claude Code, Codex, OpenCode, and Pi while preserving unrelated user configuration and independent extensions (#212) — @RandallLiuXin.
