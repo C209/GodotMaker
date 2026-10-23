@@ -28,16 +28,16 @@ generated catalogs. It produces and preserves the validated generic result;
 `references` is optional. When it is non-empty, each path is binding input:
 
 1. Verify that it is a readable image before generation.
-2. Preserve its `canonical`, `style`, or `screen` role in the prompt and trace.
+2. Preserve its `canonical` or `style` role in the prompt and trace.
 3. Attach its real image bytes through the declared provider path.
 4. STOP if that provider cannot attach every required reference.
 
 A prompt-only filename, silent omission, or provider substitution is not
 reference use. Use only the requested provider (`native`, `codex`, `gemini`,
-`openai`, or `wan`). For Codex, call `image_gen` with the real
+`openai`, `grok`, or `wan`). For Codex, call `image_gen` with the real
 `referenced_image_paths` when any are present. Record provider, model identity
 when exposed, coding model, reasoning, attachment paths/roles, and provider
-call identity. For `openai`, `gemini`, and `wan`, use `tools/asset_source_generate.py`
+call identity. For `openai`, `gemini`, `grok`, and `wan`, use `tools/asset_source_generate.py`
 with `reference_inputs`; it records hashes and attachment provenance.
 
 ## Production Loop
@@ -46,7 +46,12 @@ with `reference_inputs`; it records hashes and attachment provenance.
 
 Turn the brief into one concrete source plan: frame geometry/orientation,
 empty portrait or card-art safe zones unless finished art is requested, rarity
-language, state treatment, and only the requested component list. A reusable
+language, state treatment, and only the requested component list. Carry every
+visual rule stated in `brief` — for a card kit they cover both the image style
+and the UI visual language — into the prompt as written. Those rules decide;
+an attached reference conditions them with concrete palette and material
+evidence and never extends or overrides them. Stop with a blocker naming the
+reference role, its path, and the rule when the two contradict. A reusable
 card frame is not a flattened example card. Keep card-art and portrait windows empty
 unless the request declares finished art. Keep generated images free of readable
 text, numbers, watermarks, and unrelated composite screens.
@@ -109,7 +114,7 @@ affected checks followed by the final full check.
 Only STOP for a missing/corrupt required input, unsupported pixel-art request,
 contradictory request, unavailable declared provider or required reference
 attachment, or unrecoverable environment/permission failure. A final result is
-ready only after every applicable L0-L4 check passes.
+complete only after every applicable L0-L4 check passes.
 
 ## Result and Handoff
 
