@@ -9,20 +9,34 @@ GodotMaker is an ECS-native text-to-game framework for Godot. It uses gecs (open
 ## Repository Structure
 
 ```
-hooks/              Python hook scripts + hooks/metrics/ subsystem
-agents/             sub-agent definitions
-skills/
-  core/             pipeline, rescue, and supporting skills
-    _shared/        cross-skill reference docs (see "Shared reference docs" below)
-  assets/           first-class Asset Skills + shared L0-L4 runtime
-  reviewer/         domain reviewer skills (physics, animation, ui, etc.)
+.github/            pull-request templates and CI, docs, and release workflows
+agent-runtimes/     runner-specific config, references, and templates
+agents/             pipeline sub-agent profiles
+config/             framework defaults, schemas, and addon versions
+hooks/              Python policy hooks + hooks/metrics/ subsystem
+migrations/         timestamped target-project migrations
+scripts/            contributor Git hooks and their installer
 shell/              publish.sh / publish.ps1, report.sh / report.bat
-tools/              publish.py, check_env.py, check_project.py, asset_source_generate.py, etc.
-config/             config.yaml.default, stage_schemas.json, addon_versions.json
-agent-runtimes/     runner-specific references, templates, and hook config
+skills/
+  assets/           asset-production skills + shared asset tooling
+  core/             role-based gm-* skills + supporting skills (gecs, godot-api, ...)
+    _shared/        cross-skill reference docs (see "Shared reference docs" below)
+  reviewer/         domain reviewer skills (physics, animation, ui, etc.)
 templates/          PLAN/STRUCTURE/ASSETS/SCENES/GDD templates + game-claude.md
+tests/              hook, tool, skill-contract, and pipeline tests
+tools/              publish.py, check_env.py, check_project.py, asset_*.py, etc.
 docs/               hooks.md, wiki/, update/
 ```
+
+## Contributor hard rules
+
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) is the contributor contract for minimum
+  tool versions, development dependencies, Git-hook order, local validation,
+  CI gates, and `docs/update/next.md` entries.
+- Do not edit `CHANGELOG.md` for an ordinary contribution. Release preparation
+  follows [`docs/update/release-checklist.md`](docs/update/release-checklist.md).
+- Treat `scripts/pre-commit`, `scripts/pre-push`, and `.github/workflows/` as
+  the executable validation sources; keep documentation aligned with them.
 
 ## Shared reference docs (`skills/core/_shared/`)
 
