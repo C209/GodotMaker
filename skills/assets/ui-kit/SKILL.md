@@ -44,17 +44,24 @@ This skill can be invoked directly or by an orchestrator with the same
 contract. Do not read or write `ASSETS.md`, tags, stage state, generated
 manifests, stable entries, or worker dispatch state.
 
+The caller owns pre-dispatch planning. Before invoking this skill it must write
+`theme_plan.json`, `source_sheet_plan.json`, `stylebox_plan.json`, and
+`theme_recipe.json` under
+`.godotmaker/asset-generation/work/<asset_id>/`, use them to finish the
+canonical request, and then freeze that request. Under `/gm-asset`, the manager
+performs this work. The producer consumes all five inputs read-only.
+
 ## Produce
 
 1. Read the visual rules stated in `brief` — for a UI kit they cover both the
-   image style and the UI visual language — then inspect the reference and
-   write `theme_plan.json` before image generation. The rules decide; the
-   reference supplies concrete palette, contrast, and material evidence within
-   them. A reference that contradicts a stated rule is a STOP with a blocker
-   naming the reference role, its path, and the rule. `theme_plan.json` records
-   how those rules and that evidence resolve into this family's required
-   tokens for this one request; it is a production artifact, never a reusable
+   image style and the UI visual language — then read the caller-owned
+   `.godotmaker/asset-generation/work/<asset_id>/theme_plan.json`. Do not inspect
+   the references to derive a replacement plan. The plan records how those
+   rules and pre-dispatch reference evidence resolve into this family's
+   required tokens for this one request; it is a production artifact, never a reusable
    style source, and it never adds a rule the brief did not state.
+   A pre-dispatch finding that a reference contradicts a stated rule is a STOP
+   with a blocker naming the reference role, its path, and the rule.
    It contains:
 
    - a positive `rendering_medium` such as `bold comic-book game art`,
@@ -76,11 +83,12 @@ manifests, stable entries, or worker dispatch state.
    even when it names pixel art. The Theme plan is a deterministic
    visual-system specification, not generated art.
 
-2. Generate the deterministic source plan:
-
-   ```powershell
-   python tools/asset_ui_source_sheet_plan.py --request ASSET_REQUEST.json --rendering-medium "<theme_plan rendering_medium>" --out source_sheet_plan.json
-   ```
+2. Generate the deterministic source plan before dispatch. The caller owns
+   this step with `asset_ui_source_sheet_plan.py`, using its planning request
+   rather than the not-yet-created canonical request. During production, read
+   its result at
+   `.godotmaker/asset-generation/work/<asset_id>/source_sheet_plan.json`; do not
+   regenerate or modify it after dispatch.
 
    Both plan prompts carry the `brief` word for word — every selected design
    rule, `Do` / `Don't` entry, and UI visual-language rule reaches both provider
@@ -113,10 +121,12 @@ manifests, stable entries, or worker dispatch state.
    that never touches canvas edges. Save each raw provider image and full
    provenance. Do not accept a screen mockup as either sheet.
 
-   Write `source_sheet_provenance.json` as an array with exactly one final
-   record per sheet, in plan order. Each record contains `sheet_id`, final
-   `attempt`, exact `prompt`, `provider`, `image_model`, `coding_model`,
-   `reasoning`, `tool_call_id`, `attached_references`, and `raw_source_path`.
+   Write
+   `.godotmaker/asset-generation/reports/<asset_id>_source_sheet_provenance.json`
+   as an array with exactly one final record per sheet, in plan order. Each
+   record contains `sheet_id`, final `attempt`, exact `prompt`, `provider`,
+   `image_model`, `coding_model`, `reasoning`, `tool_call_id`,
+   `attached_references`, and `raw_source_path`.
    Every attached reference entry preserves its request `role` and readable
    request-relative `path`. Keep earlier failed generation attempts under a
    `retries` array on that sheet's final record; never replace or conceal them.
@@ -140,31 +150,31 @@ manifests, stable entries, or worker dispatch state.
    canvas, ImageMagick, Godot drawing, inline scripts, placeholders, or a new
    pixel tool. Do not pass raw provider rectangles directly to a compiler.
 
-4. Compile the flat-first runtime resources. Generate `stylebox_plan.json`:
-
-   ```powershell
-   python tools/asset_ui_stylebox_plan.py --source-sheet-plan source_sheet_plan.json --theme-plan theme_plan.json --asset-id <asset_id> --out stylebox_plan.json
-   ```
+4. Compile the flat-first runtime resources from the caller-owned
+   `.godotmaker/asset-generation/work/<asset_id>/stylebox_plan.json`, which the
+   caller generated with `asset_ui_stylebox_plan.py`. Do not regenerate or
+   modify the plan after dispatch.
 
    The fixed profiles, not freehand agent guesses, own borders, content
    margins, safe centers, stretch modes, and preview sizes. The plan expands
    eight source patches into 23 stable `StyleBoxTexture` outputs. Base,
    Primary, Secondary, and Danger button families reuse the same state patches
    through deterministic `modulate_color`; popup and tooltip reuse panel
-   patches. Copy `stylebox_plan.styleboxes` unchanged into the request at
-   `.godotmaker/asset-generation/<asset_id>-request.json` under `spec.styleboxes`
-   and compile every entry.
+   patches. Compare `stylebox_plan.styleboxes` with `spec.styleboxes` in the
+   immutable manager-owned request at
+   `.godotmaker/asset-generation/<asset_id>-request.json`; they must match
+   exactly. A mismatch is a planning-contract failure, not permission for the
+   producer to rewrite the request. Compile every declared entry.
 
    Compile 31 stable runtime `AtlasTexture` outputs from the icon metadata.
    Multiple names may intentionally share one of the 24 source rectangles.
    Bind only Godot-defined semantic icon slots in `Theme`; keep other utility
    icons as independently reusable named runtime resources.
 
-5. Generate and compile the complete Theme recipe:
-
-   ```powershell
-   python tools/asset_ui_theme_recipe.py --theme-plan theme_plan.json --asset-id <asset_id> --out theme_recipe.json
-   ```
+5. Read the caller-owned complete Theme recipe at
+   `.godotmaker/asset-generation/work/<asset_id>/theme_recipe.json`, which the
+   caller generated with `asset_ui_theme_recipe.py`, and compile it without
+   modifying the recipe.
 
    The recipe uses native `StyleBoxFlat`/`StyleBoxEmpty` resources for input,
    text, progress, slider, scrollbar, option-button, focus, separator, and
@@ -173,7 +183,9 @@ manifests, stable entries, or worker dispatch state.
    Theme to
    `res://assets/generated/ui-kit/<asset_id>/<asset_id>_theme.tres`.
 
-6. Return the generic result with separate `source_layout` sources and
+6. Before validation, publish byte-identical copies of the four caller-owned
+   plans to `assets/generated/ui-kit/<asset_id>/`. Return the generic result
+   with separate `source_layout` sources and
    `godot_artifact` runtime outputs, all under
    `res://assets/generated/ui-kit/<asset_id>/`. Sources include theme/source
    plans, recipe, raw provenance, physical atlases, atlas metadata, and
@@ -194,9 +206,10 @@ manifests, stable entries, or worker dispatch state.
    The family validator checks each output's declared path. Cross-output path
    uniqueness is enforced when the manager registers the completed result.
 
-7. Write the complete derived request to
-   `.godotmaker/asset-generation/<asset_id>-request.json` and candidate result
-   to `.godotmaker/asset-generation/<asset_id>-result.json`. Run the public
+7. Read the complete manager-owned request from
+   `.godotmaker/asset-generation/<asset_id>-request.json` without changing it,
+   and write the candidate result to
+   `.godotmaker/asset-generation/<asset_id>-result.json`. Run the public
    validator after resources exist:
 
    ```powershell
@@ -212,8 +225,10 @@ Treat a
 failed level as repair input:
 
    - L1: preserve evidence and regenerate only the invalid source sheet.
-   - L2: repair derived requests, mappings, recipes, or compiler support; do
-     not regenerate valid art for a Godot schema error.
+   - L2: report any plan/request mismatch to the caller; the producer may repair
+     compiler support or generated outputs, but it must not repair the immutable
+     request or caller-owned plans. Do not regenerate valid art for a Godot
+     schema error.
    - L3-L5: repair paths, regions, bindings, or consumer setup and rerun.
 
 Record retries. STOP only for an input-gate failure or a pinned provider that

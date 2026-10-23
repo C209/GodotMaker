@@ -84,6 +84,40 @@ def _is_asset_generation_path(path_lower: str) -> bool:
     )
 
 
+def _is_canonical_asset_request_path(path_lower: str) -> bool:
+    """True for a top-level canonical asset-generation request.
+
+    `/gm-asset` owns these immutable request files. Producers may still write
+    resolved/internal request artifacts below `work/` or `plans/`, except for
+    the manager-owned UI-kit pre-dispatch planning set checked separately.
+    """
+    marker = ".godotmaker/asset-generation/"
+    normalized = path_lower.replace("\\", "/")
+    marker_index = normalized.find(marker)
+    if marker_index < 0:
+        return False
+    relative = normalized[marker_index + len(marker):]
+    return "/" not in relative and relative.endswith("-request.json")
+
+
+def _is_manager_owned_asset_planning_path(path_lower: str) -> bool:
+    """True for the manager-owned UI-kit pre-dispatch planning set."""
+    marker = ".godotmaker/asset-generation/work/"
+    normalized = path_lower.replace("\\", "/")
+    marker_index = normalized.find(marker)
+    if marker_index < 0:
+        return False
+    relative = normalized[marker_index + len(marker):]
+    parts = relative.split("/")
+    return len(parts) == 2 and parts[1] in {
+        "planning-request.json",
+        "theme_plan.json",
+        "source_sheet_plan.json",
+        "stylebox_plan.json",
+        "theme_recipe.json",
+    }
+
+
 def _matches_allowed_gm(path_lower: str, allowed: set[str]) -> bool:
     """True if path ends with one of the allowed `.godotmaker/<file>` entries."""
     return any(path_lower.endswith(p) for p in allowed)
@@ -216,6 +250,12 @@ def _check_subagent(path_lower: str, file_name: str,
     rules can be enforced directly.
     """
     if agent_type == "asset-producer":
+        if _is_canonical_asset_request_path(path_lower):
+            _block(f"Asset producers cannot modify manager-owned canonical requests ({file_name}).",
+                   file_name, agent_id)
+        if _is_manager_owned_asset_planning_path(path_lower):
+            _block(f"Asset producers cannot modify manager-owned UI-kit planning files ({file_name}).",
+                   file_name, agent_id)
         if (_is_asset_generation_path(path_lower)
                 or _is_assets_path(path_lower)
                 or _is_references_path(path_lower)):
