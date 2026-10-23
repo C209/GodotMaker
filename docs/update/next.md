@@ -13,11 +13,13 @@ contract defines when an entry is required, its format, and allowed categories.
 ## Added
 
 - Added a canonical agent-operation contract with executable Claude Code, Codex, OpenCode, and Pi mappings, including runtime-neutral supporting-skill and visual QA handoffs (#226) — @RandallLiuXin.
+- Added a first-class `portrait` Asset Skill that generates and validates one character portrait `Texture2D` for a UI display slot, optionally conditioned on the character's identity anchor, so the `ASSETS.md` template no longer routes portraits through `background-map` (#229) — @RandallLiuXin.
 
 ## Changed
 
 - Pi delegation now resolves each published role's configured provider/model, with explicit dispatch overrides, into subprocess `--model` arguments while inheriting Pi's active model for generic Claude aliases; Codex and Pi document all seven role mappings (#225) — @RandallLiuXin.
 - Aligned generated GAP provenance and archives with evaluation-run manifests (including collision-free repeated repair rounds), centralized worker, reviewer, and verifier dispatch schemas, and resolved SCENES viewport examples from the project contract (#221) — @RandallLiuXin.
+- Runtime `ASSETS.md` rows now share one status vocabulary, `MISSING` to `provided`, `generated`, or `deferred`, and Asset Skill source layouts are limited to the physical `single`, `grid_sheet`, `region_atlas`, `tile_atlas`, and `theme_recipe` arrangements (#229) — @RandallLiuXin.
 - Publishing existing projects now refreshes GodotMaker-managed runtime hooks for Claude Code, Codex, OpenCode, and Pi while preserving unrelated user configuration and independent extensions (#212) — @RandallLiuXin.
 - Unified the asset image provider contract across config, schemas, validation, family dispatch, documentation, and generation; added Grok as a supported API provider and documented the Wan model selector (#214) — @RandallLiuXin.
 - Replaced the project `STYLE.md` visual seed with a plain-text `DESIGN.md` visual contract covering visual identity, nine image-style dimensions, UI visual language, and Do / Don't lists; existing projects migrate on publish, legacy text preserved verbatim.
