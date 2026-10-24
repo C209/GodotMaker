@@ -1,8 +1,9 @@
 # Asset Planning Reference
 
 Plan current-tag production units from `ASSETS.md`, `PLAN.md`, `DESIGN.md`,
-`STRUCTURE.md`, and `SCENES.md`. A unit owns one public request and names its
-complete expected logical output set in that family's native contract:
+`STRUCTURE.md`, and `SCENES.md`. The `/gm-asset` manager owns one public request
+per unit and names its complete expected logical output set in that family's
+native contract:
 `scene-prop-set` and `compact-prop-pack` slots, `platform-strip` segments and
 kind, or `ui-kit` / `card-kit` styleboxes, atlas regions, and theme. Use
 `request.spec.outputs` only for a multi-output family without a native output
@@ -28,12 +29,65 @@ declaration.
    images, action sheets, source grids, and other provenance remain in the
    request, result, and reports; do not plan them as rows.
 8. Record `family=<asset_type>` in every planned row's Generation Params.
+   Re-registration ownership of completed reference rows is checked against
+   that field; a row without it cannot be re-registered by its own unit.
 9. Plan a character portrait for a UI display slot as its own `portrait`
    unit. When the character has an identity anchor, such as the canonical
    image in its `character-bundle` result, attach it as a `canonical`
    reference. Never route a portrait to `background-map`, which owns scenic
    backgrounds only, or add it to a `character-bundle`, whose one runtime
    output is its `SpriteFrames`.
+10. Before dispatch, write the complete request to
+   `.godotmaker/asset-generation/<asset_id>-request.json`, validate it with
+   `tools/asset_skill_contract_check.py --kind request`, and then treat that
+   file as immutable. The producer reads this manager-owned request and writes
+    the matching `.godotmaker/asset-generation/<asset_id>-result.json`; it never
+    creates, derives, or rewrites the canonical request.
+
+## UI-kit pre-dispatch planning
+
+`ui-kit` is the one family whose complete request depends on reference-derived
+Theme tokens. The manager must close that dependency before dispatch; an
+`asset-producer` may not derive or repair the canonical request.
+
+1. Build the non-derived request fields (`asset_type`, `asset_id`, `brief`,
+   `references`, and pinned `provider`) in
+   `.godotmaker/asset-generation/work/<asset_id>/planning-request.json`. This is
+   a manager-owned draft, not the canonical request.
+2. The manager must not read reference image binaries. Dispatch `visual-qa` in
+   Question mode with every request reference and ask it to report palette,
+   contrast, shape, outline, shadow, material, and any contradiction with the
+   verbatim `brief` rules. Use that inspection as evidence; a contradiction is
+   a blocker. If inspection cannot run, stop the unit before request creation.
+3. Write the manager-owned
+   `.godotmaker/asset-generation/work/<asset_id>/theme_plan.json` from the
+   selected rules and inspected evidence. It must contain the exact Theme
+   tokens and observations required by the `ui-kit` Asset Skill; it may resolve
+   stated rules but may not add a new visual rule.
+4. Before the canonical request exists, run the deterministic UI-kit planners
+   in this order against the draft and manager-owned Theme plan:
+
+   ```powershell
+   python tools/asset_ui_source_sheet_plan.py --request .godotmaker/asset-generation/work/<asset_id>/planning-request.json --scheme .agents/skills/ui-kit/references/source-sheet-scheme.json --rendering-medium "<theme_plan rendering_medium>" --out .godotmaker/asset-generation/work/<asset_id>/source_sheet_plan.json
+   python tools/asset_ui_stylebox_plan.py --source-sheet-plan .godotmaker/asset-generation/work/<asset_id>/source_sheet_plan.json --theme-plan .godotmaker/asset-generation/work/<asset_id>/theme_plan.json --asset-id <asset_id> --out .godotmaker/asset-generation/work/<asset_id>/stylebox_plan.json
+   python tools/asset_ui_theme_recipe.py --theme-plan .godotmaker/asset-generation/work/<asset_id>/theme_plan.json --asset-id <asset_id> --out .godotmaker/asset-generation/work/<asset_id>/theme_recipe.json
+   ```
+
+5. Build the complete canonical `spec` from those plans. Copy
+   `stylebox_plan.styleboxes` exactly into `spec.styleboxes`; derive the complete
+   icon `required_regions` / `atlas_regions` declarations from the source plan;
+   declare all required states; and point `spec.stylebox_plan_path` and
+   `spec.theme.recipe_path` at their final files under
+   `res://assets/generated/ui-kit/<asset_id>/`. Then write and validate the
+   canonical request as Planning Rule 9 requires. Never write it earlier and
+   patch it after dispatch.
+6. List the four manager-owned planning files in the producer brief. The
+   producer reads them without modification, publishes byte-identical copies
+   of `theme_plan.json`, `source_sheet_plan.json`, `stylebox_plan.json`, and
+   `theme_recipe.json` under `assets/generated/ui-kit/<asset_id>/`, and declares
+   those stable `res://` copies as result sources. The generation-workspace
+   files remain the planning audit; only the stable copies satisfy L1 and enter
+   the reusable result.
 
 ## Visual Authority
 

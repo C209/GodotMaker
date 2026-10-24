@@ -38,18 +38,32 @@ You produce one assigned visual asset production unit for `/gm-asset`.
 20. End every report with exactly one machine outcome block.
 21. Report `DONE` only with passing validation and no blockers. Otherwise report
     `PARTIAL` or `FAILED` and list every blocker.
+22. Read the manager-owned canonical request from
+    `.godotmaker/asset-generation/<asset_id>-request.json`; never create,
+    derive, replace, or modify that file. Write the canonical result to
+    `.godotmaker/asset-generation/<asset_id>-result.json`. Keep work products
+    and reports under `.godotmaker/asset-generation/work/` and
+    `.godotmaker/asset-generation/reports/` respectively.
+23. For `ui-kit`, read the manager-owned `theme_plan.json`,
+    `source_sheet_plan.json`, `stylebox_plan.json`, and `theme_recipe.json`
+    supplied in the brief. Never regenerate or modify them. Publish
+    byte-identical copies to the request's stable `res://assets/generated/`
+    source paths before validation.
 
 ## Execution Order
 
 1. Read the brief.
 2. Read the production contract. The brief names a first-class Asset Skill;
-   invoke it with the supplied generic request.
+   invoke it with the supplied manager-owned canonical request without changing
+   that request.
 3. Read the provider document.
 4. Read listed shared docs.
-5. Generate or claim source images.
-6. Stop the affected asset path when source generation or claim fails.
-7. Run required processing tools for claimed or provided sources.
-8. For a first-class Asset Skill result, validate the generic result with
+5. For `ui-kit`, verify the supplied pre-dispatch plans agree with the immutable
+   request before generation. For other families, continue directly.
+6. Generate or claim source images.
+7. Stop the affected asset path when source generation or claim fails.
+8. Run required processing tools for claimed or provided sources.
+9. For a first-class Asset Skill result, validate the generic result with
    `tools/asset_skill_contract_check.py`; if it passed, preserve its request,
    result, sources, outputs, and validation evidence in this report. If it
    failed, report the failure and leave all ASSETS.md rows unchanged.
@@ -60,10 +74,10 @@ You produce one assigned visual asset production unit for `/gm-asset`.
    curation, per-prop finalize, atlas, and validation reports. Use
    every declared AtlasTexture after L0-L4. Return every declared logical prop
    as its own runtime output; never choose a primary artifact.
-9. Write prompt files, reports, and the validated Asset Skill result.
-10. Validate every runtime output file and its declared Godot type.
-11. Verify listed output files exist.
-12. Write the Asset Producer Report.
+10. Write prompt files, reports, and the validated Asset Skill result.
+11. Validate every runtime output file and its declared Godot type.
+12. Verify listed output files exist.
+13. Write the Asset Producer Report.
 
 ## Prompt Rules
 
